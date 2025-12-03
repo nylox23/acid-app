@@ -1,0 +1,65 @@
+/* Базовые стили */
+body {
+    background-color: #f8f9fa;
+}
+
+/* Адаптация верхней панели (Поиск + Кнопка) */
+.top-row-container {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: center;
+}
+
+.calc-button-style {
+    white-space: nowrap;
+    position: relative;
+    background-color: #004976;
+    border: none;
+}
+
+.indicator {
+    background-color: red;
+    border-radius: 50%;
+    padding: 2px 6px;
+    font-size: 0.8em;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+/* Медиа-запрос для мобильных устройств (менее 576px) */
+@media (max-width: 576px) {
+    /* Перестраиваем панель поиска в колонку */
+    .top-row-container {
+        flex-direction: column-reverse; /* Кнопка расчета уйдет вниз, поиск вверх */
+        width: 100%;
+    }
+
+    .top-row-container form {
+        width: 100%;
+    }
+
+    .calc-button-style {
+        width: 100%; /* Кнопка на всю ширину */
+        padding: 10px;
+    }
+
+    /* Адаптация карточек */
+    .card-img-top {
+        height: 150px; /* Фиксируем высоту картинки на мобильных */
+        object-fit: cover;
+    }
+}
+
+/* Медиа-запрос для планшетов (до 768px) */
+@media (max-width: 768px) {
+    .navbar-custom {
+        padding: 10px;
+    }
+
+    /* Увеличиваем шрифт заголовков в деталях */
+    h2 {
+        font-size: 1.5rem;
+    }
+}
