@@ -1,8 +1,12 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import acidsReducer from "./slices/acidsSlice";
+import authReducer from "./slices/authSlice";
+import carbonateReducer from "./slices/carbonateSlice";
 
 const rootReducer = combineReducers({
-    acidsData: acidsReducer
+    acidsData: acidsReducer,
+    auth: authReducer,
+    carbonateData: carbonateReducer
 });
 
 export const store = configureStore({

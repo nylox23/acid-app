@@ -2,20 +2,19 @@ import type { FC } from 'react';
 import { useEffect, useState } from 'react';
 import { Container, Row, Col, Form, Button, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import type { CarbonateInfo } from '../modules/types';
-import { getCurrentCarbonate } from '../modules/api';
 import { AcidCard } from '../components/AcidCard';
 import { BreadCrumbs } from '../components/BreadCrumbs';
-import { ROUTE_LABELS } from '../Routes';
+import { ROUTE_LABELS, ROUTES } from '../Routes';
 import './AcidsPage.css';
 
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
     useAcidsList,
     useSearchTerm,
     setSearchTermAction
 } from '../slices/acidsSlice';
 import { UseAcidsData } from '../hooks/useAcidsData';
+import type { RootState } from '../store';
 
 export const AcidsPage: FC = () => {
     const navigate = useNavigate();
@@ -23,16 +22,10 @@ export const AcidsPage: FC = () => {
 
     const acids = useAcidsList();
     const reduxSearch = useSearchTerm();
-
     const [localSearch, setLocalSearch] = useState(reduxSearch);
-
-    const [carbonateInfo, setCarbonateInfo] = useState<CarbonateInfo | null>(null);
-
     const { loading: acidsLoading } = UseAcidsData();
 
-    useEffect(() => {
-        getCurrentCarbonate().then(setCarbonateInfo);
-    }, []);
+    const { currentCarbonateId, currentAcidCount } = useSelector((state: RootState) => state.carbonateData);
 
     useEffect(() => {
         setLocalSearch(reduxSearch);
@@ -43,15 +36,26 @@ export const AcidsPage: FC = () => {
         dispatch(setSearchTermAction(localSearch));
     };
 
-    const isCalcActive = carbonateInfo && carbonateInfo.AcidCount > 0;
+    const isCalcActive = !!currentCarbonateId;
 
     return (
         <Container>
             <BreadCrumbs crumbs={[{ label: ROUTE_LABELS.ACIDS }]} />
 
             <div className="top-row-container">
-                <Button className="calc-button-style" disabled={!isCalcActive} onClick={() => isCalcActive && navigate(`/carbonate/${carbonateInfo?.CarbonateID}`)}>
-                    🧪 Рассчитать{isCalcActive && (<span className="indicator">{carbonateInfo?.AcidCount}</span>)}
+                <Button
+                    variant="primary"
+                    className="position-relative text-nowrap"
+                    disabled={!isCalcActive}
+                    onClick={() => isCalcActive && navigate(`${ROUTES.CARBONATE_DETAIL}/${currentCarbonateId}`)}
+                    style={{ minWidth: '140px' }}
+                >
+                    🧪 Рассчитать
+                    {currentAcidCount > 0 && (
+                        <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            {currentAcidCount}
+                        </span>
+                    )}
                 </Button>
 
                 <Form className="flex-grow-1" onSubmit={handleSearchSubmit}>
@@ -78,8 +82,8 @@ export const AcidsPage: FC = () => {
                                 <Col key={acid.ID}>
                                     <AcidCard
                                         id={acid.ID}
-                                        name={acid.Name}
-                                        img={acid.Img}
+                                        name={acid.Name || ''}
+                                        img={acid.Img || ''}
                                     />
                                 </Col>
                             ))}

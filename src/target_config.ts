@@ -1,6 +1,6 @@
-export const target_tauri = true;
+export const target_tauri = false;
 
-export const api_proxy_addr = "http://192.168.1.65:8080";
+export const api_proxy_addr = "http://10.111.128.121:8080";
 
 export const dest_api = (target_tauri) ? api_proxy_addr + "/api" : "/api";
 
