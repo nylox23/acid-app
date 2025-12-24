@@ -293,7 +293,7 @@ func (h *Handler) AddAcidToCarbonateAPI(c *gin.Context) {
 	userID := h.GetCurrentUserID(c)
 
 	// Получение текущей заявки
-	carbonateID, err := h.Repository.GetDraftCarbonate(userID)
+	carbonateID, err := h.Repository.GetDraftCarbonate(userID, true)
 	if err != nil {
 		logrus.Error("Failed to get carbonate:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve carbonate"})

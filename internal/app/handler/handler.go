@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"net/http"
 	"web_service_auth/internal/app/config"
+	"web_service_auth/internal/app/dto"
 	"web_service_auth/internal/app/redis"
 	"web_service_auth/internal/app/repository"
 	"web_service_auth/internal/app/role"
 	"web_service_auth/internal/app/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 type Handler struct {
@@ -36,30 +39,31 @@ func (h *Handler) RegisterAPIHandler(router *gin.Engine) {
 		{
 			acids.GET("", h.GetAcidsAPI)
 			acids.GET("/:id", h.GetAcidAPI)
-			acids.Use(h.WithAuthCheck(role.User, role.Admin)).POST("/:id/toCarbonate", h.AddAcidToCarbonateAPI)
-			acids.Use(h.WithAuthCheck(role.Admin)).POST("", h.CreateAcidAPI)
-			acids.Use(h.WithAuthCheck(role.Admin)).PUT("/:id", h.UpdateAcidAPI)
-			acids.Use(h.WithAuthCheck(role.Admin)).DELETE("/:id", h.DeleteAcidAPI)
-			acids.Use(h.WithAuthCheck(role.Admin)).POST("/:id/image", h.AddAcidImageAPI)
+			acids.POST("/:id/toCarbonate", h.WithAuthCheck(role.User, role.Admin), h.AddAcidToCarbonateAPI)
+			acids.POST("", h.WithAuthCheck(role.Admin), h.CreateAcidAPI)
+			acids.PUT("/:id", h.WithAuthCheck(role.Admin), h.UpdateAcidAPI)
+			acids.DELETE("/:id", h.WithAuthCheck(role.Admin), h.DeleteAcidAPI)
+			acids.POST("/:id/image", h.WithAuthCheck(role.Admin), h.AddAcidImageAPI)
 		}
 
 		// Домен заявок
 		carbonates := api.Group("/carbonates")
 		{
-			carbonates.Use(h.WithAuthCheck(role.User, role.Admin)).GET("/current", h.GetCurrentCarbonateAPI)
-			carbonates.Use(h.WithAuthCheck(role.User, role.Admin)).GET("", h.GetCarbonatesAPI)
-			carbonates.Use(h.WithAuthCheck(role.User, role.Admin)).GET("/:id", h.GetCarbonateAPI)
-			carbonates.Use(h.WithAuthCheck(role.User, role.Admin)).PUT("", h.UpdateCarbonateAPI)
-			carbonates.Use(h.WithAuthCheck(role.User, role.Admin)).PUT("/form", h.FormCarbonateAPI)
-			carbonates.Use(h.WithAuthCheck(role.Admin)).PUT("/:id/status", h.SetCarbonateStatusAPI)
-			carbonates.Use(h.WithAuthCheck(role.User, role.Admin)).DELETE("/:id", h.DeleteCarbonateAPI)
+			carbonates.GET("/current", h.WithAuthCheck(role.User, role.Admin), h.GetCurrentCarbonateAPI)
+			carbonates.GET("", h.WithAuthCheck(role.User, role.Admin), h.GetCarbonatesAPI)
+			carbonates.GET("/:id", h.WithAuthCheck(role.User, role.Admin), h.GetCarbonateAPI)
+			carbonates.PUT("", h.WithAuthCheck(role.User, role.Admin), h.UpdateCarbonateAPI)
+			carbonates.PUT("/form", h.WithAuthCheck(role.User, role.Admin), h.FormCarbonateAPI)
+			carbonates.PUT("/:id/status", h.WithAuthCheck(role.Admin), h.SetCarbonateStatusAPI)
+			carbonates.DELETE("/:id", h.WithAuthCheck(role.User, role.Admin), h.DeleteCarbonateAPI)
 		}
 
 		// Домен м-м
 		carbonateAcids := api.Group("/carbonate-acids")
 		{
-			carbonateAcids.Use(h.WithAuthCheck(role.User, role.Admin)).PUT("/:id", h.UpdateCarbonateAcidAPI)
-			carbonateAcids.Use(h.WithAuthCheck(role.User, role.Admin)).DELETE("/:id", h.DeleteCarbonateAcidAPI)
+			carbonateAcids.PUT("/:id", h.WithAuthCheck(role.User, role.Admin), h.UpdateCarbonateAcidAPI)
+			carbonateAcids.DELETE("/:id", h.WithAuthCheck(role.User, role.Admin), h.DeleteCarbonateAcidAPI)
+			carbonateAcids.PUT("/update-results", h.UpdateCalculationResultAPI)
 		}
 
 		// Домен пользователей
@@ -67,9 +71,33 @@ func (h *Handler) RegisterAPIHandler(router *gin.Engine) {
 		{
 			users.POST("/register", h.RegisterUserAPI)
 			users.POST("/login", h.LoginUserAPI)
-			users.Use(h.WithAuthCheck(role.User, role.Admin)).POST("/logout", h.LogoutUserAPI)
-			users.Use(h.WithAuthCheck(role.User, role.Admin)).GET("/profile", h.GetUserProfileAPI)
-			users.Use(h.WithAuthCheck(role.User, role.Admin)).PUT("/profile", h.UpdateUserProfileAPI)
+			users.POST("/logout", h.WithAuthCheck(role.User, role.Admin), h.LogoutUserAPI)
+			users.GET("/profile", h.WithAuthCheck(role.User, role.Admin), h.GetUserProfileAPI)
+			users.PUT("/profile", h.WithAuthCheck(role.User, role.Admin), h.UpdateUserProfileAPI)
 		}
 	}
+}
+
+const InternalToken = "12345678"
+
+func (h *Handler) UpdateCalculationResultAPI(c *gin.Context) {
+	token := c.GetHeader("X-Internal-Token")
+	if token != InternalToken {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid internal token"})
+		return
+	}
+
+	var req dto.CalcCallbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, item := range req.Results {
+		if err := h.Repository.UpdateCarbonateAcidResult(item.ID, item.Result); err != nil {
+			logrus.Errorf("Failed to update async result for ID %d: %v", item.ID, err)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "updated"})
 }

@@ -18,9 +18,9 @@ func (r *Repository) GetDraftCarbonateID(creatorID uuid.UUID) uint {
 }
 
 // Получение/создание текущей заявки (статус черновик)
-func (r *Repository) GetDraftCarbonate(creatorID uuid.UUID) (uint, error) {
+func (r *Repository) GetDraftCarbonate(creatorID uuid.UUID, create bool) (uint, error) {
 	carbonateID := r.GetDraftCarbonateID(creatorID)
-	if carbonateID == 0 {
+	if carbonateID == 0 && create {
 		carbonate := ds.Carbonate{
 			Status:     "черновик",
 			DateCreate: time.Now(),

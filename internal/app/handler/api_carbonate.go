@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -22,7 +24,7 @@ import (
 func (h *Handler) GetCurrentCarbonateAPI(c *gin.Context) {
 	userID := h.GetCurrentUserID(c)
 
-	carbonateID, _ := h.Repository.GetDraftCarbonate(userID)
+	carbonateID, _ := h.Repository.GetDraftCarbonate(userID, false)
 	acidCount := h.Repository.GetAcidCount(userID)
 
 	response := dto.CarbonateIconsResponse{
@@ -46,21 +48,41 @@ func (h *Handler) GetCurrentCarbonateAPI(c *gin.Context) {
 // @Failure      500        {object}  map[string]string
 // @Router       /api/carbonates [get]
 func (h *Handler) GetCarbonatesAPI(c *gin.Context) {
-	var filter dto.CarbonateFilter
-	var sortID uuid.UUID
+	// 1. Получаем параметры вручную как строки
+	status := c.Query("status")
+	dateFromStr := c.Query("date_from")
+	dateToStr := c.Query("date_to")
 
-	if err := c.ShouldBindQuery(&filter); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	var dateFrom, dateTo time.Time
+	var err error
+
+	const layout = "2006-01-02"
+
+	if dateFromStr != "" {
+		dateFrom, err = time.Parse(layout, dateFromStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат date_from, ожидается YYYY-MM-DD"})
+			return
+		}
 	}
 
+	if dateToStr != "" {
+		dateTo, err = time.Parse(layout, dateToStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат date_to, ожидается YYYY-MM-DD"})
+			return
+		}
+		dateTo = dateTo.Add(24 * time.Hour).Add(-1 * time.Second)
+	}
+
+	var sortID uuid.UUID
 	if h.GetCurrentUserRole(c) == role.Admin {
 		sortID = uuid.Nil
 	} else {
 		sortID = h.GetCurrentUserID(c)
 	}
 
-	carbonates, err := h.Repository.GetCarbonatesWithFilter(filter.Status, filter.DateFrom, filter.DateTo, sortID)
+	carbonates, err := h.Repository.GetCarbonatesWithFilter(status, dateFrom, dateTo, sortID)
 	if err != nil {
 		logrus.Error("Failed to get carbonates:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve carbonates"})
@@ -191,7 +213,7 @@ func (h *Handler) GetCarbonateAPI(c *gin.Context) {
 func (h *Handler) UpdateCarbonateAPI(c *gin.Context) {
 	userID := h.GetCurrentUserID(c)
 
-	id, _ := h.Repository.GetDraftCarbonate(userID)
+	id, _ := h.Repository.GetDraftCarbonate(userID, true)
 
 	var req dto.CarbonateUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -240,7 +262,7 @@ func (h *Handler) UpdateCarbonateAPI(c *gin.Context) {
 func (h *Handler) FormCarbonateAPI(c *gin.Context) {
 	userID := h.GetCurrentUserID(c)
 
-	carbonateID, _ := h.Repository.GetDraftCarbonate(userID)
+	carbonateID, _ := h.Repository.GetDraftCarbonate(userID, true)
 
 	carbonate, err := h.Repository.GetCarbonateByID(uint(carbonateID))
 	if err != nil {
@@ -336,13 +358,45 @@ func (h *Handler) SetCarbonateStatusAPI(c *gin.Context) {
 	}
 
 	if req.Status == "завершен" {
-		// Вычисление полей по теме в м-м
-		if err := h.calculateCarbonateResults(uint(id)); err != nil {
-			logrus.Error("Failed to calculate carbonate results:", err)
-		}
+		go h.sendToCalcService(uint(id))
 	}
 
-	c.JSON(http.StatusOK, dto.MessageResponse{Message: "Carbonate status updated successfully"})
+	c.JSON(http.StatusOK, dto.MessageResponse{Message: "Carbonate status updated. Calculation pending."})
+}
+
+func (h *Handler) sendToCalcService(carbonateID uint) {
+	acids, err := h.Repository.GetCarbonateAcids(carbonateID)
+	if err != nil {
+		logrus.Error("Async Calc: failed to get acids:", err)
+		return
+	}
+
+	var items []dto.CalcRequestItem
+	for _, acid := range acids {
+		items = append(items, dto.CalcRequestItem{
+			ID:        acid.ID,
+			CMass:     acid.Carbonate.Mass,
+			AMass:     acid.Mass,
+			HPlus:     acid.Acid.Hplus,
+			MolarMass: acid.Acid.MolarMass,
+		})
+	}
+
+	payload := dto.CalcRequest{Items: items}
+	jsonData, _ := json.Marshal(payload)
+
+	djangoURL := "http://localhost:8000/calculate"
+	resp, err := http.Post(djangoURL, "application/json", bytes.NewBuffer(jsonData))
+
+	if err != nil {
+		logrus.Error("Async Calc: failed to send request to django:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		logrus.Errorf("Async Calc: django returned status %d", resp.StatusCode)
+	}
 }
 
 // DeleteCarbonateAPI godoc

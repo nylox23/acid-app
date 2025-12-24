@@ -42,7 +42,7 @@ func (h *Handler) UpdateCarbonateAcidAPI(c *gin.Context) {
 
 	userID := h.GetCurrentUserID(c)
 
-	carbonateID, err := h.Repository.GetDraftCarbonate(userID)
+	carbonateID, err := h.Repository.GetDraftCarbonate(userID, true)
 	if err != nil {
 		logrus.Error("Failed to get carbonate:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve carbonate"})
@@ -106,7 +106,7 @@ func (h *Handler) DeleteCarbonateAcidAPI(c *gin.Context) {
 
 	userID := h.GetCurrentUserID(c)
 
-	carbonateID, err := h.Repository.GetDraftCarbonate(userID)
+	carbonateID, err := h.Repository.GetDraftCarbonate(userID, false)
 	if err != nil {
 		logrus.Error("Failed to get carbonate:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve carbonate"})
